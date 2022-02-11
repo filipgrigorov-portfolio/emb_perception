@@ -1,1 +1,1 @@
-# emb_perception
+# Embedded perception stack
