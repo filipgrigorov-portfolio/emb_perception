@@ -1,7 +1,7 @@
 cmake_minimum_required(VERSION 3.16)
 project(emb_perception C CXX)
 
-find_package(OpenCV REQUIRED COMPONENTS core imgproc)
+find_package(OpenCV REQUIRED COMPONENTS core imgproc highgui)
 
 if (OpenCV_FOUND)
     message("Found OpenCV: " ${OpenCV_VERSION})
@@ -10,7 +10,7 @@ endif()
 
 find_package(Threads)
 
-set(CMAKE_CXX_STANDARD 14)
+set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF)
 
