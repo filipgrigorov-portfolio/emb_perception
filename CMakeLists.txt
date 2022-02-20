@@ -1,7 +1,11 @@
 cmake_minimum_required(VERSION 3.16)
 project(emb_perception C CXX)
 
-find_package(OpenCV REQUIRED COMPONENTS core imgproc highgui)
+# libtorch: bin, include, lib, share
+# cmake -DCMAKE_PREFIX_PATH=/path/to/libtorch
+# cmake --build . --config Release
+
+find_package(OpenCV REQUIRED COMPONENTS core imgcodecs imgproc highgui)
 
 if (OpenCV_FOUND)
     message("Found OpenCV: " ${OpenCV_VERSION})
@@ -10,15 +14,21 @@ endif()
 
 find_package(Threads)
 
+# Note: There is a linking conflict with opencv (download https://download.pytorch.org/libtorch/cu102/libtorch-cxx11-abi-shared-with-deps-1.10.2%2Bcu102.zip)
+list(APPEND CMAKE_PREFIX_PATH "${CMAKE_SOURCE_DIR}/3rdparty/libtorch/")
+find_package(Torch REQUIRED)
+
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF)
+
+set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 
 #set(TENSORFLOW_SOURCE_DIR "" CACHE PATH "tensorflow lite project dir")
 
 # TODO(Filip): make the packages external (separate recipe)
 set(src 
-    src/detection/detection.cpp
+    src/detection/tflite_object_detection.cpp
     src/main.cpp
 )
 
@@ -49,4 +59,5 @@ if (${TF_LITE})
 endif()
 
 #target_include_directories(${PROJECT_NAME} PRIVATE "${CMAKE_CURRENT_LIST_DIR}/../tensorflow_src")
+target_link_libraries(${PROJECT_NAME} ${TORCH_LIBRARIES})
 target_link_libraries(${PROJECT_NAME} ${OpenCV_LIBS} ${TF_LITE})
