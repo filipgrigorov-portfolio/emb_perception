@@ -14,16 +14,12 @@ namespace emb {
         TfLiteObjectDetector(const std::string& model_path, int img_width, int img_height);
         ~TfLiteObjectDetector();
 
-        void Draw(const cv::Mat& input, const emb::DetectionResults& results) const;
-
-        emb::DetectionResults Infer(const cv::Mat& input, bool quantized);
+        emb::DetectionResults Infer(const cv::Mat& input, bool quantized=false, const std::pair<float, float>& range={0.f, 255.f});
 
      private:
         // Note: RGB [-1, 1] (not quantized)
         std::pair<void*, size_t> AllocateCvMat(const cv::Mat& img, const std::pair<float, float>& range={0.f, 255.f});
         std::pair<void*, size_t> AllocateQuantizedCvMat(const cv::Mat& img);
-
-        cv::Mat PreprocessCvMat(const cv::Mat& img);
 
         cv::Size img_dims_;
 

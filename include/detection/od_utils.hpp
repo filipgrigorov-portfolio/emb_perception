@@ -1,6 +1,8 @@
 #pragma once
 #include <vector>
 
+#include "common/common_headers.hpp"
+
 namespace emb {
     struct DetectionResult {
         std::string class_lbl{""};
@@ -9,4 +11,8 @@ namespace emb {
     };
 
     using DetectionResults = std::vector<DetectionResult>;
+
+    void Draw(const cv::Mat& input, const emb::DetectionResults& results);
+
+    cv::Mat PreprocessCvMat(const cv::Mat& img, const cv::Size& new_img_dims);
 }  // namespace emb

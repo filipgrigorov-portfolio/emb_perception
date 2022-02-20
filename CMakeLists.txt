@@ -28,6 +28,8 @@ set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 
 # TODO(Filip): make the packages external (separate recipe)
 set(src 
+    src/detection/od_utils.cpp
+    src/detection/torch_object_detection.cpp
     src/detection/tflite_object_detection.cpp
     src/main.cpp
 )

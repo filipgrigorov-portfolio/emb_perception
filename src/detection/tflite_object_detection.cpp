@@ -101,20 +101,13 @@ namespace emb {
         }
     }
 
-    void TfLiteObjectDetector::Draw(const cv::Mat& input, const emb::DetectionResults& results) const {
-        cv::Mat canvas = input.clone();
-        for (const auto& result : results) {
-            cv::Rect_<int> bbox{cv::Point_<int>(result.xmin, result.ymin), cv::Point_<int>(result.xmax, result.ymax)};
-            cv::rectangle(canvas, bbox, cv::Scalar(0, 0, 255), 1);
-            
-            cv::imwrite("annotated.jpg", canvas);
-        }
-    }
-
-    emb::DetectionResults TfLiteObjectDetector::Infer(const cv::Mat& input, bool quantized) {
+    emb::DetectionResults TfLiteObjectDetector::Infer(
+        const cv::Mat& input, bool quantized/*=false*/, const std::pair<float, float>& range/*={0.f, 255.f}*/) {
         assert(input.data);
 
-        auto img2size = (quantized) ? AllocateQuantizedCvMat(PreprocessCvMat(input)) : AllocateCvMat(PreprocessCvMat(input));
+        auto img2size = (quantized) ? 
+            AllocateQuantizedCvMat(PreprocessCvMat(input, img_dims_)) : 
+            AllocateCvMat(PreprocessCvMat(input, img_dims_), range);
         TfLiteTensorCopyFromBuffer(input_tensor_.get(), img2size.first, img2size.second);
 
         if (TfLiteInterpreterInvoke(tf_interpreter_.get()) != kTfLiteOk) {
@@ -252,25 +245,6 @@ namespace emb {
         //std::cout << ss.str();
 
         return std::make_pair((void*)data, size);
-    }
-
-    cv::Mat TfLiteObjectDetector::PreprocessCvMat(const cv::Mat& img) {
-        cv::Mat processed_img;
-        /* 
-            Note: fx=0 and fy=0 play crucial role for the accuracy of the result
-            If (0, 0), the image is scaled by fx and fy along the horizontal and
-            vertical axis
-            If (0, 0), the scales are :
-                (1) dsize.width / image.cols
-                (2) dsize.height / image.rows
-            dsize = Size(fx * image.cols, fy * image.rows) if no size is specified
-            If (0, 0) => we keep the aspect ratio intact
-        */
-        cv::resize(img, processed_img, img_dims_, 0, 0, cv::INTER_AREA);
-        cv::cvtColor(processed_img, processed_img, cv::COLOR_BGR2RGB);
-        std::cout << "\nImage resized shape: " << processed_img.cols << " x " 
-            << processed_img.rows << " x " << processed_img.channels() << std::endl;
-        return processed_img;
     }
 
 }  // namespace emb
