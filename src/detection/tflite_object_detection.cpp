@@ -101,7 +101,7 @@ namespace emb {
         }
     }
 
-    void TfLiteObjectDetector::Draw(const cv::Mat& input, const emd::DetectionResults<TfLiteObjectDetector::DetectionResult>& results) const {
+    void TfLiteObjectDetector::Draw(const cv::Mat& input, const emb::DetectionResults& results) const {
         cv::Mat canvas = input.clone();
         for (const auto& result : results) {
             cv::Rect_<int> bbox{cv::Point_<int>(result.xmin, result.ymin), cv::Point_<int>(result.xmax, result.ymax)};
@@ -111,7 +111,7 @@ namespace emb {
         }
     }
 
-    emd::DetectionResults<TfLiteObjectDetector::DetectionResult> TfLiteObjectDetector::Infer(const cv::Mat& input, bool quantized) {
+    emb::DetectionResults TfLiteObjectDetector::Infer(const cv::Mat& input, bool quantized) {
         assert(input.data);
 
         auto img2size = (quantized) ? AllocateQuantizedCvMat(PreprocessCvMat(input)) : AllocateCvMat(PreprocessCvMat(input));
@@ -156,14 +156,14 @@ namespace emb {
         std::cout.flush();
 #endif
 
-        emd::DetectionResults<TfLiteObjectDetector::DetectionResult> results;
+        emb::DetectionResults results;
         const float* detection_boxes_f = detection_boxes->data.f;
         const float* detection_classes_f = detection_classes->data.f;
         const float* detection_scores_f = detection_scores->data.f;
 
         // Note: [ymin, xmin, ymax, xmax]
         for (auto idx = 0; idx < num_detections_f; ++idx) {
-            TfLiteObjectDetector::DetectionResult result;
+            emb::DetectionResult result;
             const auto index = idx * 4;
             result.ymin = detection_boxes_f[index] * input.rows;
             result.xmin = detection_boxes_f[index + 1] * input.cols;

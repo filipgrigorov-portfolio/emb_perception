@@ -8,25 +8,15 @@
 #include "common.h"
 #include "c_api.h"
 
-//TODO(Filip): write abstract class (use dynamic cast for appropriate algorithm)
-// or
-//TODO(Filip): use pimpl for the algorithms (choose appropriate one)
-
 namespace emb {
     class TfLiteObjectDetector {
      public:
-        struct DetectionResult {
-            std::string class_lbl{""};
-            float score = 0.f;
-            float xmin = 0.f, ymin = 0.f, xmax = 0.f, ymax = 0.f;
-        };
-
         TfLiteObjectDetector(const std::string& model_path, int img_width, int img_height);
         ~TfLiteObjectDetector();
 
-        void Draw(const cv::Mat& input, const emd::DetectionResults<DetectionResult>& results) const;
+        void Draw(const cv::Mat& input, const emb::DetectionResults& results) const;
 
-        emd::DetectionResults<DetectionResult> Infer(const cv::Mat& input, bool quantized);
+        emb::DetectionResults Infer(const cv::Mat& input, bool quantized);
 
      private:
         // Note: RGB [-1, 1] (not quantized)
