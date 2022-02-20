@@ -11,9 +11,13 @@ int main(void) {
     std::unique_ptr<emb::TfLiteObjectDetector> od = std::make_unique<emb::TfLiteObjectDetector>(model_path, 300, 300);
 
     // TODO(Filip): build test around this
-    std::string img_path{cwd / ".." / "test_data/single_image_test.jpeg"};
+    std::string img_path{cwd / ".." / "test_data/single_car.jpg"};
     std::cout << img_path << std::endl;
     cv::Mat img = cv::imread(img_path);
+    if (!img.data) {
+        std::cerr << "Image has not been loaded, properly" << std::endl;
+        exit(1);
+    }
     std::cout << "Image shape: " << img.cols << " x " << img.rows << std::endl;
 
     auto det_res = od->Infer(img, true);

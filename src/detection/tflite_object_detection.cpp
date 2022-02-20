@@ -104,17 +104,17 @@ namespace emb {
     void TfLiteObjectDetector::Draw(const cv::Mat& input, const emd::DetectionResults<TfLiteObjectDetector::DetectionResult>& results) const {
         cv::Mat canvas = input.clone();
         for (const auto& result : results) {
-            cv::Rect bbox{cv::Point2i(result.xmin, result.ymin), cv::Point2i(result.xmax, result.ymax)};
+            cv::Rect_<int> bbox{cv::Point_<int>(result.xmin, result.ymin), cv::Point_<int>(result.xmax, result.ymax)};
             cv::rectangle(canvas, bbox, cv::Scalar(0, 0, 255), 1);
             
-            cv::imwrite("annotated.jpeg", canvas);
+            cv::imwrite("annotated.jpg", canvas);
         }
     }
 
     emd::DetectionResults<TfLiteObjectDetector::DetectionResult> TfLiteObjectDetector::Infer(const cv::Mat& input, bool quantized) {
         assert(input.data);
 
-        auto img2size = (quantized) ? ProcessQuantizedCvMat(input, img_dims_) : ProcessQuantizedCvMat(input, img_dims_);
+        auto img2size = (quantized) ? AllocateQuantizedCvMat(PreprocessCvMat(input)) : AllocateCvMat(PreprocessCvMat(input));
         TfLiteTensorCopyFromBuffer(input_tensor_.get(), img2size.first, img2size.second);
 
         if (TfLiteInterpreterInvoke(tf_interpreter_.get()) != kTfLiteOk) {
@@ -161,18 +161,25 @@ namespace emb {
         const float* detection_classes_f = detection_classes->data.f;
         const float* detection_scores_f = detection_scores->data.f;
 
+        // Note: [ymin, xmin, ymax, xmax]
         for (auto idx = 0; idx < num_detections_f; ++idx) {
             TfLiteObjectDetector::DetectionResult result;
             const auto index = idx * 4;
-            result.xmin = detection_boxes_f[index] * input.cols;
-            result.ymin = detection_boxes_f[index + 1] * input.rows;
-            result.xmax = detection_boxes_f[index + 2] * input.cols;
-            result.ymax = detection_boxes_f[index + 3] * input.rows;
-            std::cout << detection_classes_f[idx] << std::endl;
-            if (detection_classes_f[idx] > labels.size() || detection_scores_f[idx] <= 0.4) {
+            result.ymin = detection_boxes_f[index] * input.rows;
+            result.xmin = detection_boxes_f[index + 1] * input.cols;
+            result.ymax = detection_boxes_f[index + 2] * input.rows;
+            result.xmax = detection_boxes_f[index + 3] * input.cols;
+            
+            if (detection_classes_f[idx] > labels.size()) {
                 std::cerr << "Unsupported label; skipping" << std::endl;
                 continue;
             }
+
+            if (detection_scores_f[idx] <= 0.3) {
+                std::cerr << "Low confidence= " << detection_scores_f[idx] * 100 << "%; skipping" << std::endl;
+                continue;
+            }
+
             result.class_lbl = labels[static_cast<int>(detection_classes_f[idx])];
             result.score = detection_scores_f[idx];
 
@@ -186,55 +193,29 @@ namespace emb {
     }
 
     //private
-    std::pair<float*, size_t> TfLiteObjectDetector::ProcessCvMat(const cv::Mat& input, const cv::Size& img_res) {
-        cv::Mat input_img;
-        cv::resize(input, input_img, img_res, cv::INTER_AREA);
-        std::cout << "\nImage resized shape: " << input_img.cols << " x " << input_img.rows << " x " << input_img.channels() << std::endl;
-
-        // Note: img' = (img / 255) * 2 - 1 <=> [0, 1] * 2 = [0, 2] - 1 = [-1, 1]
-        // Note: Only if the input needs to be in [-1, 1]
-        //input_img.convertTo(input_img, CV_32FC3, 2.f / 255.f, -1);
+    std::pair<void*, size_t> TfLiteObjectDetector::AllocateCvMat(
+        const cv::Mat& img, const std::pair<float, float>& range/*={0.f, 255.f}*/) {
+        /* 
+            Note: Only if the input needs to be in [-1, 1]
+                  img' = (img / 255) * 2 - 1 <=> [0, 1] * 2 = [0, 2] - 1 = [-1, 1]
+        */
+        cv::Mat normalized_img = img.clone();
+        auto min_intensity = 0.0; 
+        auto max_intensity = 0.0;
+        cv::minMaxLoc(normalized_img, &min_intensity, &max_intensity);
+        if (range.first != static_cast<float>(min_intensity) && range.second != static_cast<float>(max_intensity)) {
+            normalized_img.convertTo(normalized_img, CV_32FC3, (1.f - range.first) / range.second, range.first);
+        }
+        
         float* data = input_tensor_->data.f;
-        size_t size = input_img.cols * input_img.rows * input_img.channels() * sizeof(float);
-        std::memcpy(data, (void*)input_img.data, size);
+        size_t size = normalized_img.cols * normalized_img.rows * normalized_img.channels() * sizeof(float);
+        std::memcpy(data, (void*)normalized_img.data, size);
 
         std::stringstream ss;
-        for (auto idx = 0; idx < input_img.cols * input_img.rows * input_img.channels() - 1; ++idx) {
+        for (auto idx = 0; idx < normalized_img.cols * normalized_img.rows * normalized_img.channels() - 1; ++idx) {
             ss << data[idx] << ",";
         }
-        ss << data[input_img.cols * input_img.rows * input_img.channels() - 1];
-        std::ofstream os("img.npy", std::ios::binary);
-        if (os.is_open()) {
-            std::cout << "Serializing img into npy" << std::endl;
-            os.write(ss.str().c_str(), ss.str().size());
-        }
-        std::cout << ss.str();
-
-        return std::make_pair(data, size);
-    }
-
-    std::pair<uint8_t*, size_t> TfLiteObjectDetector::ProcessQuantizedCvMat(const cv::Mat& input, const cv::Size& img_res) {
-        cv::Mat input_img;
-        cv::resize(input, input_img, img_res, cv::INTER_AREA);
-        std::cout << "\nImage resized shape: " << input_img.cols << " x " << input_img.rows << " x " << input_img.channels() << std::endl;
-
-        if (!input_tensor_.get()) {
-            throw std::runtime_error("Badly allocated input tensor");
-        }
-
-        uint8_t* data = input_tensor_->data.uint8;
-        size_t size = input_img.cols * input_img.rows * input_img.channels() * sizeof(uint8_t);
-        /*for (auto idx = 0; idx < size; ++idx) {
-            std::cout << input_img.data[idx] << " ";
-        }
-        std::cout << std::endl;*/
-        void* copiedbytes = std::memcpy(data, (void*)input_img.data, size);
-
-        std::stringstream ss;
-        for (auto idx = 0; idx < input_img.cols * input_img.rows * input_img.channels() - 1; ++idx) {
-            ss << data[idx] << ",";
-        }
-        ss << data[input_img.cols * input_img.rows * input_img.channels() - 1];
+        ss << data[normalized_img.cols * normalized_img.rows * normalized_img.channels() - 1];
         std::ofstream os("img.npy", std::ios::binary);
         if (os.is_open()) {
             std::cout << "Serializing img into npy" << std::endl;
@@ -242,7 +223,54 @@ namespace emb {
         }
         //std::cout << ss.str();
 
-        return std::make_pair(data, size);
+        return std::make_pair((void*)data, size);
+    }
+
+    std::pair<void*, size_t> TfLiteObjectDetector::AllocateQuantizedCvMat(const cv::Mat& img) {
+        if (!input_tensor_.get()) {
+            throw std::runtime_error("Badly allocated input tensor");
+        }
+
+        uint8_t* data = input_tensor_->data.uint8;
+        size_t size = img.cols * img.rows * img.channels() * sizeof(uint8_t);
+        /*for (auto idx = 0; idx < size; ++idx) {
+            std::cout << img.data[idx] << " ";
+        }
+        std::cout << std::endl;*/
+        std::memcpy(data, (void*)img.data, size);
+
+        std::stringstream ss;
+        for (auto idx = 0; idx < img.cols * img.rows * img.channels() - 1; ++idx) {
+            ss << data[idx] << ",";
+        }
+        ss << data[img.cols * img.rows * img.channels() - 1];
+        std::ofstream os("img.npy", std::ios::binary);
+        if (os.is_open()) {
+            std::cout << "Serializing img into npy" << std::endl;
+            os.write(ss.str().c_str(), ss.str().size());
+        }
+        //std::cout << ss.str();
+
+        return std::make_pair((void*)data, size);
+    }
+
+    cv::Mat TfLiteObjectDetector::PreprocessCvMat(const cv::Mat& img) {
+        cv::Mat processed_img;
+        /* 
+            Note: fx=0 and fy=0 play crucial role for the accuracy of the result
+            If (0, 0), the image is scaled by fx and fy along the horizontal and
+            vertical axis
+            If (0, 0), the scales are :
+                (1) dsize.width / image.cols
+                (2) dsize.height / image.rows
+            dsize = Size(fx * image.cols, fy * image.rows) if no size is specified
+            If (0, 0) => we keep the aspect ratio intact
+        */
+        cv::resize(img, processed_img, img_dims_, 0, 0, cv::INTER_AREA);
+        cv::cvtColor(processed_img, processed_img, cv::COLOR_BGR2RGB);
+        std::cout << "\nImage resized shape: " << processed_img.cols << " x " 
+            << processed_img.rows << " x " << processed_img.channels() << std::endl;
+        return processed_img;
     }
 
 }  // namespace emb

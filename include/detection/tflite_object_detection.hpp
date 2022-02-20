@@ -30,8 +30,10 @@ namespace emb {
 
      private:
         // Note: RGB [-1, 1] (not quantized)
-        std::pair<float*, size_t> ProcessCvMat(const cv::Mat& input, const cv::Size& img_res);
-        std::pair<uint8_t*, size_t> ProcessQuantizedCvMat(const cv::Mat& input, const cv::Size& img_res);
+        std::pair<void*, size_t> AllocateCvMat(const cv::Mat& img, const std::pair<float, float>& range={0.f, 255.f});
+        std::pair<void*, size_t> AllocateQuantizedCvMat(const cv::Mat& img);
+
+        cv::Mat PreprocessCvMat(const cv::Mat& img);
 
         cv::Size img_dims_;
 
