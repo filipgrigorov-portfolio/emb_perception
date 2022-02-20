@@ -69,4 +69,4 @@ cmake --build .
 ## Not included:
 
 * libtorch (~1G) (has to be downloaded from pytorch.org)
-* local IDE setup
+* local IDE setup files
