@@ -37,13 +37,21 @@ namespace emb {
             input.data, {input_img.rows, input_img.cols, input.channels()});
         input_tensors_.push_back(input_tensor);
         // Note: BHWC -> BCHW
-        for (auto& tensor : input_tensors_) {
-            tensor = torch::reshape(tensor, c10::IntArrayRef{1,  input.channels(), input_img.rows, input_img.cols});
+        std::vector<torch::jit::IValue> ivalues;
+        for (auto& input_tensor : input_tensors_) {
+            input_tensor = torch::reshape(input_tensor, c10::IntArrayRef{1,  input.channels(), input_img.rows, input_img.cols});
 #ifdef DEBUG
-            std::cout << "[" << tensor.size(0) << ", " << tensor.size(1) << ", " 
-                << tensor.size(2) << ", " << tensor.size(3) << "]" << std::endl;
+            std::cout << "[" << input_tensor.size(0) << ", " << input_tensor.size(1) << ", " 
+                << input_tensor.size(2) << ", " << input_tensor.size(3) << "]" << std::endl;
 #endif
+            ivalues.emplace_back(input_tensor);
         }
+
+        auto output_tensor = module_.forward(ivalues).toTensor();
+#ifdef DEBUG
+            std::cout << "[" << output_tensor.size(0) << ", " << output_tensor.size(1) << ", " 
+                << output_tensor.size(2) << ", " << output_tensor.size(3) << "]" << std::endl;
+#endif
 
         emb::DetectionResults results;
         return results;
